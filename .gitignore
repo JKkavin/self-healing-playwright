@@ -1,9 +1,12 @@
+@"
 .env
 .venv/
 __pycache__/
 *.pyc
 *.egg-info/
 _backup/
+.idea/
 healed_locators.json
 api_cache.json
-healing_log.jsonl.idea/
+healing_log.jsonl
+"@ | Set-Content .gitignore -Encoding UTF8
