@@ -1,0 +1,21 @@
+Metadata-Version: 2.4
+Name: self-healing-playwright
+Version: 0.1.0
+Summary: Self-healing Playwright automation powered by Google Gemini
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: playwright>=1.40
+Requires-Dist: openai>=1.0
+Requires-Dist: python-dotenv>=1.0
+
+# self-healing-playwright
+
+Self-healing Playwright automation powered by Google Gemini.
+
+Locators and API keys that break in production get automatically healed by
+AI, then cached so the fix is instant on every subsequent run.
+
+## Install
+
+```bash
+pip install -e .

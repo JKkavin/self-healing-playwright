@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "self-healing-playwright"
+version = "0.1.0"
+description = "Self-healing Playwright automation powered by Google Gemini"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "playwright>=1.40",
+    "openai>=1.0",
+    "python-dotenv>=1.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["healer*"]
