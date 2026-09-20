@@ -6,4 +6,4 @@ __pycache__/
 _backup/
 healed_locators.json
 api_cache.json
-healing_log.jsonl
+healing_log.jsonl.idea/
