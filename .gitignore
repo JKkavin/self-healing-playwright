@@ -2,8 +2,8 @@
 .venv/
 __pycache__/
 *.pyc
+*.egg-info/
+_backup/
 healed_locators.json
 api_cache.json
 healing_log.jsonl
-
-.env
