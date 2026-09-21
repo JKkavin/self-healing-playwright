@@ -1,10 +1,366 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>$Title$</title>
+<meta charset="UTF-8">
+<title>healer — Package Documentation</title>
+<style>
+  body {
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    max-width: 900px;
+    margin: 40px auto;
+    padding: 0 30px;
+    line-height: 1.6;
+    color: #222;
+  }
+  h1 { border-bottom: 3px solid #2563eb; padding-bottom: 8px; color: #1e3a8a; }
+  h2 { margin-top: 32px; color: #1e40af; border-bottom: 1px solid #ddd; padding-bottom: 4px; }
+  h3 { margin-top: 24px; color: #1e40af; }
+  code { background: #f3f4f6; padding: 2px 5px; border-radius: 3px; font-size: 0.92em; font-family: Consolas, monospace; }
+  pre { background: #f3f4f6; padding: 14px; border-left: 4px solid #2563eb; border-radius: 4px; overflow-x: auto; font-family: Consolas, monospace; font-size: 0.88em; }
+  table { border-collapse: collapse; width: 100%; margin: 14px 0; }
+  th, td { border: 1px solid #d1d5db; padding: 8px 12px; text-align: left; }
+  th { background: #e5e7eb; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.8em; font-weight: bold; }
+  .ok { background: #d1fae5; color: #065f46; }
+  .no { background: #fee2e2; color: #991b1b; }
+  .note { background: #fef3c7; border-left: 4px solid #f59e0b; padding: 10px 14px; margin: 14px 0; border-radius: 4px; }
+  .spoken { background: #eff6ff; border-left: 4px solid #2563eb; padding: 14px 18px; margin: 16px 0; border-radius: 4px; font-style: italic; }
+  @media print {
+    body { margin: 20px; }
+    pre { page-break-inside: avoid; }
+    h2 { page-break-after: avoid; }
+  }
+</style>
 </head>
 <body>
-$END$
+
+<h1>healer — Self-Healing Playwright Automation</h1>
+
+<p><strong>Version:</strong> 0.1.0 &nbsp; | &nbsp; <strong>Powered by:</strong> Google Gemini &nbsp; | &nbsp; <strong>Requires:</strong> Python 3.11+</p>
+
+<hr>
+
+<h2>1. Overview</h2>
+
+<p><code>healer</code> is a self-healing layer for Playwright automation. When a locator or API key breaks, it uses Google Gemini to find the correct replacement, caches it, and retries — <strong>without changing your test code</strong>.</p>
+
+<h3>Current Capabilities</h3>
+<table>
+  <tr><th>Feature</th><th>Status</th></tr>
+  <tr><td>Self-healing UI locators (fill, click, check, select, press, read text)</td><td><span class="badge ok">✅ Done</span></td></tr>
+  <tr><td>Self-healing API response keys</td><td><span class="badge ok">✅ Done</span></td></tr>
+  <tr><td>Persistent caching (AI runs once, then $0 forever)</td><td><span class="badge ok">✅ Done</span></td></tr>
+  <tr><td>Confidence scoring</td><td><span class="badge ok">✅ Done</span></td></tr>
+  <tr><td>Full audit log</td><td><span class="badge ok">✅ Done</span></td></tr>
+  <tr><td>Model fallback across 4 Gemini models</td><td><span class="badge ok">✅ Done</span></td></tr>
+  <tr><td>Drop-in <code>HealingPage</code> wrapper</td><td><span class="badge ok">✅ Done</span></td></tr>
+  <tr><td>Pip-installable package</td><td><span class="badge ok">✅ Done</span></td></tr>
+  <tr><td>Iframe support</td><td><span class="badge no">❌ Not yet</span></td></tr>
+  <tr><td>Hover, drag, set_input_files healing</td><td><span class="badge no">❌ Not yet</span></td></tr>
+  <tr><td>CI/CD integration</td><td><span class="badge no">❌ Not yet</span></td></tr>
+  <tr><td>Unit tests</td><td><span class="badge no">❌ Not yet</span></td></tr>
+</table>
+
+<hr>
+
+<h2>2. Package Structure</h2>
+
+<pre>PythonProject1/
+├── healer/                    ← the package
+│   ├── __init__.py            ← public API
+│   ├── locator.py             ← UI locator healing engine
+│   ├── page.py                ← HealingPage / HealingLocator
+│   ├── api.py                 ← API key healing
+│   ├── cache.py               ← locator cache
+│   └── log.py                 ← audit trail
+├── examples/
+│   └── real_test.py           ← real enterprise test
+├── pyproject.toml
+├── README.md
+├── requirements.txt
+└── .env                       ← GEMINI_API_KEY (gitignored)</pre>
+
+<hr>
+
+<h2>3. File-by-File Documentation</h2>
+
+<h3>3.1 <code>healer/__init__.py</code> — Public API</h3>
+<p>Everything a user needs to import comes from here.</p>
+
+<table>
+  <tr><th>Symbol</th><th>Type</th><th>Purpose</th></tr>
+  <tr><td><code>HealingPage</code></td><td>class</td><td>Drop-in Playwright Page wrapper</td></tr>
+  <tr><td><code>HealingLocator</code></td><td>class</td><td>Wrapped locator with healing</td></tr>
+  <tr><td><code>self_healing_action</code></td><td>function</td><td>Explicit healing for a single action</td></tr>
+  <tr><td><code>self_healing_get</code></td><td>function</td><td>Heal a broken API response key</td></tr>
+  <tr><td><code>heal_locator</code></td><td>function</td><td>Low-level: ask AI for a new selector</td></tr>
+  <tr><td><code>log_heal</code></td><td>function</td><td>Manually log a heal event</td></tr>
+</table>
+
+<pre>from healer import HealingPage, self_healing_action, self_healing_get</pre>
+
+<h3>3.2 <code>healer/log.py</code> — Audit Trail</h3>
+<p>Append-only log. Every heal writes one JSON line to <code>healing_log.jsonl</code>.</p>
+
+<p><strong>Function:</strong> <code>log_heal(action, old, new, page_url, source, confidence=1.0, heal_type="locator")</code></p>
+
+<table>
+  <tr><th>Param</th><th>Values</th><th>Meaning</th></tr>
+  <tr><td><code>action</code></td><td>fill, click, api_get, ...</td><td>What was attempted</td></tr>
+  <tr><td><code>old</code></td><td>string</td><td>Original locator/key that failed</td></tr>
+  <tr><td><code>new</code></td><td>string</td><td>Healed replacement</td></tr>
+  <tr><td><code>page_url</code></td><td>string</td><td>URL or endpoint</td></tr>
+  <tr><td><code>source</code></td><td>ai / cache</td><td>Where the fix came from</td></tr>
+  <tr><td><code>confidence</code></td><td>0.0 – 1.0</td><td>AI confidence</td></tr>
+  <tr><td><code>heal_type</code></td><td>locator / api</td><td>Which subsystem healed</td></tr>
+</table>
+
+<p><strong>Example log line:</strong></p>
+<pre>{"timestamp":"2026-09-20T14:18:26+00:00","type":"locator",
+ "action":"fill","old":"#password","new":"#passcode",
+ "page":"https://example.com/login","source":"ai","confidence":0.98}</pre>
+
+<div class="note">⚠️ If <code>confidence &lt; 0.7</code>, a warning prints so a human reviews.</div>
+
+<h3>3.3 <code>healer/cache.py</code> — Locator Cache</h3>
+<p>Persistent storage for healed locators. First heal costs an AI call; every future run hits the cache for free.</p>
+
+<table>
+  <tr><th>Function</th><th>Purpose</th></tr>
+  <tr><td><code>get_cached(failed_locator, page_url)</code></td><td>Look up a previous heal</td></tr>
+  <tr><td><code>save_cached(failed_locator, page_url, healed_locator, confidence)</code></td><td>Store a new heal</td></tr>
+</table>
+
+<p><strong>Cache file:</strong> <code>healed_locators.json</code></p>
+
+<pre>{
+  "https://example.com::#password": {
+    "locator": "#passcode",
+    "confidence": 0.98
+  }
+}</pre>
+
+<p><strong>Stale cache handling:</strong> If the cached locator itself fails, the healer re-asks the AI and updates the cache.</p>
+
+<h3>3.4 <code>healer/locator.py</code> — The Engine</h3>
+<p>Extracts DOM, prompts Gemini, parses response, performs action, orchestrates heal-on-failure.</p>
+
+<h4><code>get_dom_snapshot(page)</code></h4>
+<p>Extracts only interactive elements. Captures:</p>
+<ul>
+  <li>Tags: input, button, a, select, textarea</li>
+  <li>Roles: button, menuitem, link, tab</li>
+  <li>Attributes: tag, type, id, name, placeholder, text, aria_label, role</li>
+</ul>
+<p>Text truncated to 80 chars for small payloads.</p>
+
+<h4><code>heal_locator(page, failed_locator, action_type, value)</code></h4>
+<p>Sends DOM snapshot + failed locator to Gemini. Returns <code>(new_locator, confidence)</code>.</p>
+
+<h4><code>_perform(page, locator, action, value, timeout)</code></h4>
+<p>Supported actions: <code>fill</code>, <code>type</code>, <code>click</code>, <code>check</code>, <code>uncheck</code>, <code>select_option</code>, <code>press</code>, <code>text_content</code>, <code>inner_text</code>.</p>
+
+<h4><code>self_healing_action(page, locator, action, value)</code></h4>
+<p>The 5-step flow:</p>
+<ol>
+  <li>Try original locator</li>
+  <li>Try cache</li>
+  <li>Ask AI (if cache miss or stale)</li>
+  <li>Save to cache + log</li>
+  <li>Retry with healed locator</li>
+</ol>
+
+<h4>Model fallback order</h4>
+<pre>MODEL_FALLBACKS = [
+    "gemini-3.8-flash",         # primary
+    "gemini-3.7-flash",         # fallback 1
+    "gemini-flash-latest",      # fallback 2
+    "gemini-flash-lite-latest"  # fallback 3
+]</pre>
+<p>On <strong>503 UNAVAILABLE</strong> → retry same model. On <strong>404 NOT_FOUND</strong> → skip to next model.</p>
+
+<h3>3.5 <code>healer/page.py</code> — Drop-in Wrapper</h3>
+<p>Lets you write normal Playwright code that self-heals.</p>
+
+<h4><code>HealingPage</code></h4>
+<p>Methods returning a <code>HealingLocator</code>:</p>
+<ul>
+  <li><code>locator(selector)</code></li>
+  <li><code>get_by_role(role, name=...)</code></li>
+  <li><code>get_by_text(text)</code></li>
+  <li><code>get_by_label(label)</code></li>
+  <li><code>get_by_placeholder(placeholder)</code></li>
+  <li><code>get_by_test_id(test_id)</code></li>
+</ul>
+<p>Everything else passes through: <code>goto</code>, <code>wait_for_timeout</code>, <code>expect_popup</code>, <code>expect_download</code>, <code>_page</code>, etc.</p>
+
+<h4><code>HealingLocator</code></h4>
+<p>Healed actions: <code>fill</code>, <code>type</code>, <code>click</code>, <code>check</code>, <code>uncheck</code>, <code>select_option</code>, <code>press</code>, <code>text_content</code>, <code>inner_text</code>.</p>
+<p>Pass-through (no healing): <code>hover</code>, <code>wait_for</code>, <code>bounding_box</code>, etc.</p>
+<p>Timeout: <strong>5 seconds</strong> per attempt.</p>
+
+<h3>3.6 <code>healer/api.py</code> — API Key Healing</h3>
+<p>Same pattern as locators, but for JSON response keys.</p>
+
+<h4><code>self_healing_get(data, key, endpoint)</code></h4>
+<p>Like <code>data[key]</code>, but heals if the key changed. Returns the value, or raises <code>KeyError</code> if healing fails.</p>
+
+<h4>Flow</h4>
+<ol>
+  <li>If <code>key in data</code> → return value</li>
+  <li>If cache has a mapping and the new key exists → return cached value</li>
+  <li>Send JSON to Gemini, ask: <em>"Which key replaces 'X'?"</em></li>
+  <li>If AI returns <code>NO_MATCH</code> → raise <code>KeyError</code></li>
+  <li>Otherwise cache, log, return</li>
+</ol>
+
+<p><strong>API cache file:</strong> <code>api_cache.json</code></p>
+
+<pre>{
+  "https://api.example.com/user/123::user_id": {
+    "key": "id",
+    "confidence": 0.99
+  }
+}</pre>
+
+<hr>
+
+<h2>4. Usage Examples</h2>
+
+<h3>4.1 Drop-in (recommended)</h3>
+<pre>from playwright.sync_api import sync_playwright
+from healer import HealingPage
+
+with sync_playwright() as p:
+    page = HealingPage(p.chromium.launch().new_page())
+    page.goto("https://example.com/login")
+    page.get_by_role("textbox", name="Username").fill("alice")
+    page.get_by_role("textbox", name="Password").fill("secret")
+    page.get_by_role("button", name="Log In").click()</pre>
+
+<h3>4.2 Explicit healing</h3>
+<pre>from healer import self_healing_action
+self_healing_action(page, "#password", "fill", "secret")</pre>
+
+<h3>4.3 API healing</h3>
+<pre>from healer import self_healing_get
+user_id = self_healing_get(api_json, "user_id", "https://api.example.com/user")</pre>
+
+<h3>4.4 Review heals</h3>
+<pre>Get-Content healing_log.jsonl</pre>
+
+<hr>
+
+<h2>5. Files Generated at Runtime</h2>
+<table>
+  <tr><th>File</th><th>Contains</th><th>Gitignore?</th></tr>
+  <tr><td><code>healed_locators.json</code></td><td>UI locator cache</td><td>✅ Yes</td></tr>
+  <tr><td><code>api_cache.json</code></td><td>API key cache</td><td>✅ Yes</td></tr>
+  <tr><td><code>healing_log.jsonl</code></td><td>Audit trail</td><td>✅ Yes</td></tr>
+</table>
+
+<hr>
+
+<h2>6. Configurable Knobs</h2>
+<table>
+  <tr><th>Setting</th><th>Where</th><th>Default</th></tr>
+  <tr><td>Model list</td><td><code>MODEL_FALLBACKS</code></td><td>4 models</td></tr>
+  <tr><td>Timeout per action</td><td><code>_perform(..., timeout=5000)</code></td><td>5000ms</td></tr>
+  <tr><td>Low-confidence warning</td><td><code>log.py</code></td><td>0.7</td></tr>
+  <tr><td>DOM text truncation</td><td><code>locator.py</code></td><td>80 chars</td></tr>
+</table>
+
+<hr>
+
+<h2>7. Limitations (Current)</h2>
+<table>
+  <tr><th>Limitation</th><th>Impact</th><th>Fix Path</th></tr>
+  <tr><td>No iframe support</td><td>Login forms in iframes won't heal</td><td>Option H</td></tr>
+  <tr><td>Limited actions</td><td>hover, drag, set_input_files don't heal</td><td>Option H</td></tr>
+  <tr><td>No unit tests</td><td>Refactors can silently break</td><td>Option K</td></tr>
+  <tr><td>No CI/CD integration</td><td>Must run locally</td><td>Option I</td></tr>
+  <tr><td>AI sees DOM snapshots</td><td>Sensitive data leaves your network</td><td>Security review</td></tr>
+</table>
+
+<hr>
+
+<h2>8. Quick Start for Teammates</h2>
+
+<pre>git clone &lt;your-repo-url&gt;
+cd self-healing-playwright
+python -m venv venv
+venv\Scripts\activate          # Windows
+pip install -r requirements.txt
+pip install -e .</pre>
+
+<p>Create <code>.env</code> with:</p>
+<pre>GEMINI_API_KEY=your-key-here</pre>
+
+<p>Get a free key at <a href="https://aistudio.google.com/apikey">aistudio.google.com/apikey</a></p>
+
+<p>Run the demo:</p>
+<pre>python examples/real_test.py</pre>
+
+<hr>
+
+<h2>9. Where to Go Next</h2>
+<table>
+  <tr><th>Option</th><th>What It Adds</th><th>When to Do</th></tr>
+  <tr><td><strong>H</strong></td><td>Iframe support + more actions</td><td>When team hits iframe-heavy apps</td></tr>
+  <tr><td><strong>I</strong></td><td>CI/CD integration</td><td>When asked "why isn't this automated?"</td></tr>
+  <tr><td><strong>J</strong></td><td>Convert more scripts</td><td>When you have &gt;3 scripts needing healing</td></tr>
+  <tr><td><strong>K</strong></td><td>Unit tests + PyPI prep</td><td>Before public open-source release</td></tr>
+</table>
+
+<hr>
+
+<h2>10. Spoken Explanation — Each File in Plain English</h2>
+
+<p>Read this out loud if you want a voiceover. Each section is one paragraph describing what a file does, without jargon.</p>
+
+<h3>10.1 Overview</h3>
+<div class="spoken">
+<p>This package is called healer. It's a helper library for Playwright automation. When a locator in a test breaks, or when an API response key changes, healer asks Google Gemini to find the right replacement, saves it, and tries again. Your test code doesn't need to change — the healing happens behind the scenes.</p>
+</div>
+
+<h3>10.2 <code>__init__.py</code> — The Front Door</h3>
+<div class="spoken">
+<p>Think of this file as the front door of the package. It's what you see and use from outside. Everything a user needs to import comes from here — the HealingPage class, the self_healing_action function, and the self_healing_get function. The rest of the files are implementation details. When someone types "from healer import HealingPage", this file is what answers. It's short and simple — just a list of exports.</p>
+</div>
+
+<h3>10.3 <code>log.py</code> — The Diary</h3>
+<div class="spoken">
+<p>This file keeps a diary. Every time the healer fixes something, it writes one line to a file called healing_log.jsonl. Each line records what action was attempted, the old broken locator, the new healed locator, which page it happened on, whether the fix came from the AI or from the cache, and how confident the AI was. If the AI's confidence is very low — below 0.7 — the log prints a yellow warning. That's a signal for a human to look at it. The diary is append-only, so nothing ever gets overwritten. It grows into a complete history of every heal that has ever happened.</p>
+</div>
+
+<h3>10.4 <code>cache.py</code> — The Memory</h3>
+<div class="spoken">
+<p>This file is the healer's memory. The first time a locator breaks, the AI has to figure out the fix — that takes a second or two and uses an API call. The cache saves that fix so the next time, the healer doesn't need to ask the AI again. It just looks it up. The cache is stored in a file called healed_locators.json. Every entry has a key — the broken locator plus the page URL — and a value containing the healed locator and the confidence score. There's one clever detail: if the cached locator ever stops working too, the healer notices and quietly asks the AI for a fresh fix. So the cache never goes stale.</p>
+</div>
+
+<h3>10.5 <code>locator.py</code> — The Brain</h3>
+<div class="spoken">
+<p>This is the most important file. It's the brain of the healer. It does the actual work. First, it takes a snapshot of the page — but not the whole page. It only grabs the interactive elements: inputs, buttons, links, menus. That keeps the payload small and helps the AI focus. The snapshot includes things like the element's id, name, placeholder, aria-label, and role. Then, when a locator fails, it sends that snapshot to Gemini along with the failed locator and the action that was attempted. It asks Gemini: given this page, what should the new locator be? Gemini replies with a CSS selector and a confidence score. The file then handles the retry logic: try the original locator, try the cache, ask the AI, save the result, retry with the healed locator. It's the five-step healing flow in one place. There's also a safety net. Google sometimes retires model names or has temporary outages. This file tries four different Gemini models in order and handles both 503 errors and 404 errors. So the healer keeps working even when Google's API is having a bad day.</p>
+</div>
+
+<h3>10.6 <code>page.py</code> — The Drop-in Wrapper</h3>
+<div class="spoken">
+<p>This file is what makes adoption easy. It defines two classes: HealingPage and HealingLocator. HealingPage wraps a regular Playwright page. When your code asks for a locator — say, page.get_by_role with the name Submit — instead of returning a normal Playwright locator, it returns a HealingLocator. That wrapper looks exactly like a normal locator to your code, but underneath it has healing powers. HealingLocator intercepts the actions you perform — fill, click, check, and so on. When you call dot click, it first tries the normal way. If that times out, it quietly asks the healer to find the right element, then retries. Your test code never sees the difference. The beauty is that you don't have to rewrite your tests. You just change one line — instead of page equals context dot new page, you write page equals HealingPage of context dot new page. Everything else stays the same.</p>
+</div>
+
+<h3>10.7 <code>api.py</code> — API Healing</h3>
+<div class="spoken">
+<p>This file applies the same idea to API responses. Sometimes an API changes its response shape — for example, user_id becomes id, or token becomes auth_token. Your test then crashes with a KeyError. self_healing_get is a drop-in replacement for data of key. If the key is missing, it checks its own cache, then asks Gemini which key in the response most likely replaces the old one. It caches the mapping in api_cache.json so future runs are instant. It's the same pattern as locators — first try, then cache, then AI — but for JSON keys instead of DOM elements.</p>
+</div>
+
+<h3>10.8 Summary</h3>
+<div class="spoken">
+<p>Six files. Each has one clear job. The init file is the front door. The log file is the diary. The cache file is the memory. The locator file is the brain. The page file is the wrapper. The api file handles API healing. Together, they form a self-healing layer for Playwright. When a locator or API key breaks, the healer finds the fix, remembers it, and keeps your test running — without you having to change a line of test code.</p>
+</div>
+
+<hr>
+
+<p style="text-align:center;color:#666;font-size:0.9em;">healer 0.1.0 — Generated 2026</p>
+
 </body>
 </html>
