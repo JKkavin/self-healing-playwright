@@ -2,7 +2,7 @@
 Drop-in replacement for Playwright's Page and Locator.
 
 Usage:
-    from healing_page import HealingPage
+    from healer import HealingPage
     ...
     page = HealingPage(context.new_page())
     page.get_by_role("button", name="Log In").click()   # self-heals!
@@ -15,7 +15,7 @@ from healer.log import log_heal
 
 
 # Actions that take a value
-ACTIONS_WITH_VALUE = {"fill", "type", "select_option", "press"}
+ACTIONS_WITH_VALUE = {"fill", "type", "select_option", "press", "set_input_files"}
 
 
 class HealingLocator:
@@ -23,14 +23,12 @@ class HealingLocator:
 
     def __init__(self, page: Page, original_locator: str, description: str = ""):
         self._page = page
-        self._original = original_locator          # the selector string we were built from
-        self._description = description            # human-readable, e.g. "get_by_role('button', name='Log In')"
+        self._original = original_locator
+        self._description = description
 
-    # --- Internal: the current Playwright Locator ---
     def _playwright_locator(self) -> Locator:
         return self._page.locator(self._original)
 
-    # --- Self-healing action runner ---
     def _run(self, action: str, value=None, timeout: int = 8000):
         # 1. Try original
         try:
@@ -59,20 +57,55 @@ class HealingLocator:
 
         # 3. Ask AI
         print(f"🤖 Asking AI to heal...")
-        new_locator, confidence = heal_locator(self._page, self._original, action, value or "")
+        try:
+            new_locator, confidence = heal_locator(self._page, self._original, action, value or "")
+        except Exception as e:
+            print(f"🚨 AI healing failed: {e}")
+            raise TimeoutError(f"Healing failed for '{self._original}': {e}")
+
         print(f"🩹 AI suggested: '{new_locator}' (confidence {confidence:.2f})")
 
-        # 4. Save + log + retry
+        # 4. Save + log
         save_cached(self._original, self._page.url, new_locator, confidence)
         log_heal(action, self._original, new_locator, self._page.url, "ai", confidence)
 
-        el = self._page.locator(new_locator)
-        if action in ACTIONS_WITH_VALUE:
-            result = getattr(el, action)(value, timeout=timeout)
-        else:
-            result = getattr(el, action)(timeout=timeout)
-        print(f"✅ Healed: {action}('{new_locator}') succeeded")
-        return result
+        # 5. Retry with healed locator
+        try:
+            el = self._page.locator(new_locator)
+            if action in ACTIONS_WITH_VALUE:
+                result = getattr(el, action)(value, timeout=timeout)
+            else:
+                result = getattr(el, action)(timeout=timeout)
+            print(f"✅ Healed: {action}('{new_locator}') succeeded")
+            return result
+        except TimeoutError:
+            print(f"⚠️ Healed locator also failed. Asking AI once more with context...")
+        except Exception as e:
+            print(f"🚨 Non-timeout error during heal retry: {e}")
+            raise
+
+        # 6. Second-chance heal
+        try:
+            hint = f"{self._original} (previously healed to '{new_locator}' but that also failed)"
+            new_locator_2, confidence_2 = heal_locator(self._page, hint, action, value or "")
+            print(f"🩹 AI 2nd suggestion: '{new_locator_2}' (confidence {confidence_2:.2f})")
+
+            save_cached(self._original, self._page.url, new_locator_2, confidence_2)
+            log_heal(action, self._original, new_locator_2, self._page.url, "ai-retry", confidence_2)
+
+            el = self._page.locator(new_locator_2)
+            if action in ACTIONS_WITH_VALUE:
+                result = getattr(el, action)(value, timeout=timeout)
+            else:
+                result = getattr(el, action)(timeout=timeout)
+            print(f"✅ Healed (2nd try): {action}('{new_locator_2}') succeeded")
+            return result
+        except Exception as e:
+            print(f"🚨 Second-chance heal also failed: {e}")
+            raise TimeoutError(
+                f"All healing attempts failed for '{self._original}'. "
+                f"Last error: {e}"
+            )
 
     # --- Actions with a value ---
     def fill(self, value, **kwargs):
@@ -87,6 +120,9 @@ class HealingLocator:
     def select_option(self, value, **kwargs):
         return self._run("select_option", value)
 
+    def set_input_files(self, files, **kwargs):
+        return self._run("set_input_files", files)
+
     # --- Actions without a value ---
     def click(self, **kwargs):
         return self._run("click")
@@ -96,6 +132,12 @@ class HealingLocator:
 
     def uncheck(self, **kwargs):
         return self._run("uncheck")
+
+    def hover(self, **kwargs):
+        return self._run("hover")
+
+    def wait_for(self, **kwargs):
+        return self._run("wait_for")
 
     def text_content(self, **kwargs):
         return self._run("text_content")
@@ -114,14 +156,10 @@ class HealingPage:
     def __init__(self, page: Page):
         self._page = page
 
-    # --- Locator factories: return HealingLocator instead of raw Locator ---
-
     def locator(self, selector, **kwargs) -> HealingLocator:
         return HealingLocator(self._page, selector)
 
     def get_by_role(self, role, **kwargs) -> HealingLocator:
-        # Build a CSS-ish string that Playwright understands
-        # Playwright supports `role=button[name="Log In"]` syntax
         name = kwargs.get("name")
         if name:
             selector = f'role={role}[name="{name}"]'
@@ -141,6 +179,5 @@ class HealingPage:
     def get_by_test_id(self, test_id) -> HealingLocator:
         return HealingLocator(self._page, f'[data-testid="{test_id}"]')
 
-    # --- Pass-through (navigation, waits, evaluation, etc.) ---
     def __getattr__(self, name):
         return getattr(self._page, name)
