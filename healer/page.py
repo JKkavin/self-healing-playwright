@@ -145,8 +145,19 @@ class HealingLocator:
     def inner_text(self, **kwargs):
         return self._run("inner_text")
 
-    # --- Pass-through (no healing, just delegate) ---
+    # --- Pass-through with .nth() / .first / .last preserved for healing ---
     def __getattr__(self, name):
+        if name == "nth":
+            def nth_wrapper(index):
+                return HealingLocator(
+                    self._page,
+                    f"{self._original} >> nth={index}"
+                )
+            return nth_wrapper
+        if name == "first":
+            return HealingLocator(self._page, f"{self._original} >> nth=0")
+        if name == "last":
+            return HealingLocator(self._page, f"{self._original} >> nth=-1")
         return getattr(self._playwright_locator(), name)
 
 

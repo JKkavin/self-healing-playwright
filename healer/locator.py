@@ -22,12 +22,11 @@ MODEL_FALLBACKS = [
 ]
 
 ACTIONS_WITH_VALUE = {
-    "fill", "select_option", "press", "type",
-    "set_input_files",   # NEW
+    "fill", "select_option", "press", "type", "set_input_files",
 }
 
-# NEW: raise if confidence is below this (set to 0.0 to disable)
-MIN_CONFIDENCE_THRESHOLD = 0.4
+# Warn if confidence is below this (set to 0.0 to disable)
+MIN_CONFIDENCE_THRESHOLD = 0.7
 
 
 # ---------- LLM call with retry + fallback ----------
@@ -57,33 +56,43 @@ def _call_gemini_with_retry(prompt: str) -> str:
     raise last_error
 
 
-# ---------- DOM snapshot ----------
+# ---------- DOM snapshot (dropdown-aware) ----------
 
 def get_dom_snapshot(page: Page) -> str:
     elements = page.evaluate("""() => {
         const els = document.querySelectorAll(
             'input, button, a, select, textarea, ' +
             '[role="button"], [role="menuitem"], [role="link"], [role="tab"], ' +
-            '[role="checkbox"], [role="radio"], [role="combobox"]'
+            '[role="checkbox"], [role="radio"], [role="combobox"], ' +
+            '[role="listbox"], [role="option"], [role="listitem"], ' +
+            '.ui-dropdown-trigger, .ui-dropdown, [class*="dropdown"], [class*="select"]'
         );
-        return Array.from(els).map(el => ({
-            tag: el.tagName.toLowerCase(),
-            type: el.getAttribute('type'),
-            id: el.id,
-            name: el.getAttribute('name'),
-            placeholder: el.getAttribute('placeholder'),
-            text: (el.innerText || el.value || '').trim().slice(0, 80),
-            aria_label: el.getAttribute('aria-label'),
-            role: el.getAttribute('role')
-        }));
+        return Array.from(els).map(el => {
+            // Try to detect the current value / label for dropdowns
+            let currentValue = '';
+            const label = el.querySelector('.ui-dropdown-label, [class*="label"]');
+            if (label && label.innerText) currentValue = label.innerText.trim().slice(0, 40);
+
+            return {
+                tag: el.tagName.toLowerCase(),
+                type: el.getAttribute('type'),
+                id: el.id,
+                name: el.getAttribute('name'),
+                placeholder: el.getAttribute('placeholder'),
+                text: (el.innerText || el.value || '').trim().slice(0, 80),
+                current_value: currentValue,
+                aria_label: el.getAttribute('aria-label'),
+                role: el.getAttribute('role'),
+                classes: el.className && typeof el.className === 'string' ? el.className.slice(0, 100) : ''
+            };
+        });
     }""")
     return json.dumps(elements, indent=2)
 
 
-# ---------- Locator healing ----------
+# ---------- Locator healing (dropdown-aware prompt) ----------
 
 def heal_locator(page: Page, failed_locator: str, action_type: str, value: str = ""):
-    """Ask Gemini to heal the locator. Returns (new_locator, confidence)."""
     dom = get_dom_snapshot(page)
     value_hint = f" with value `{value}`" if value else ""
 
@@ -101,16 +110,36 @@ Return your answer in EXACTLY this JSON format, nothing else:
   "confidence": <number between 0.0 and 1.0>
 }}
 
-Rules:
-- Use CSS selectors only.
-- Match element type to action:
-  - fill/type → input or textarea
-  - click → button, a, or clickable element
-  - check/uncheck → input[type=checkbox] or input[type=radio]
-  - select_option → select
-  - set_input_files → input[type=file]
-- Prefer id, then name, then a stable attribute.
-- confidence = how sure you are that this is the correct element (1.0 = certain, 0.5 = guessing).
+Rules by action type:
+
+**fill/type**: target is an `input` or `textarea`.
+  - Match by `id`, `name`, `placeholder`, or `aria-label`.
+
+**click**: target is a `button`, `a`, or clickable element.
+  - Match by `id`, `text`, `aria-label`, or role.
+  - **IMPORTANT for custom dropdowns**: if the failed locator was something like
+    `.ui-dropdown-trigger` or a dropdown opener, target an element with
+    `class*="dropdown"` or `class*="select"` (NOT a generic button).
+  - **For dropdown menu items**: target `[role="listitem"]`, `[role="option"]`,
+    or `li` elements whose text matches the value.
+
+**check/uncheck**: target is `input[type=checkbox]` or `input[type=radio]`.
+
+**select_option**: target is a native `<select>` element.
+
+**set_input_files**: target is `input[type=file]`.
+
+**General rules:**
+- Use CSS selectors only (no XPath, no `get_by_role`).
+- Prefer stable attributes: id > name > aria-label > data-* > class.
+- If the failed locator contains `>> nth=N`, preserve that N in your answer
+  by writing the selector followed by ` >> nth=N`.
+  Example: if failed locator is `.ui-dropdown-trigger >> nth=1`, and the
+  correct element has class `.p-dropdown-trigger`, return `.p-dropdown-trigger >> nth=1`.
+- For `listitem` selectors, look for `[role="listitem"]` or `li` with matching text.
+- If the failed locator mentioned a class containing "dropdown", prefer
+  elements with a matching class over generic buttons.
+- confidence = how sure you are (1.0 = certain, 0.5 = guessing).
 """
 
     raw = _call_gemini_with_retry(prompt)
@@ -131,7 +160,7 @@ Rules:
     return locator, confidence
 
 
-# ---------- Action runner (now supports more actions) ----------
+# ---------- Action runner ----------
 
 def _perform(page: Page, locator: str, action: str, value=None, timeout: int = 5000):
     element = page.locator(locator)
@@ -163,7 +192,7 @@ def _perform(page: Page, locator: str, action: str, value=None, timeout: int = 5
         raise ValueError(f"Unsupported action: {action}")
 
 
-# ---------- Main healing action (with retry-after-heal + confidence check) ----------
+# ---------- Main healing action ----------
 
 def self_healing_action(page: Page, locator: str, action: str, value=None):
     if action in ACTIONS_WITH_VALUE and value is None:
@@ -191,10 +220,14 @@ def self_healing_action(page: Page, locator: str, action: str, value=None):
 
     # 3. Ask AI (first attempt)
     print(f"🤖 Asking AI to heal...")
-    new_locator, confidence = heal_locator(page, locator, action, value or "")
+    try:
+        new_locator, confidence = heal_locator(page, locator, action, value or "")
+    except Exception as e:
+        print(f"🚨 AI healing failed: {e}")
+        raise TimeoutError(f"Healing failed for '{locator}': {e}")
+
     print(f"🩹 AI suggested: '{new_locator}' (confidence {confidence:.2f})")
 
-    # NEW: low-confidence warning
     if confidence < MIN_CONFIDENCE_THRESHOLD:
         print(f"🚨 LOW CONFIDENCE ({confidence:.2f} < {MIN_CONFIDENCE_THRESHOLD}). Heal may be wrong — proceeding anyway.")
 
@@ -209,16 +242,24 @@ def self_healing_action(page: Page, locator: str, action: str, value=None):
         return result if result is not None else new_locator
     except TimeoutError:
         print(f"⚠️ Healed locator also failed. Asking AI once more with context...")
+    except Exception as e:
+        print(f"🚨 Non-timeout error during heal retry: {e}")
+        raise
 
-    # 6. NEW: Second-chance heal — give AI more context
-    hint = f"{locator} (previously healed to '{new_locator}' but that also failed)"
-    new_locator_2, confidence_2 = heal_locator(page, hint, action, value or "")
-    print(f"🩹 AI 2nd suggestion: '{new_locator_2}' (confidence {confidence_2:.2f})")
+    # 6. Second-chance heal
+    try:
+        hint = f"{locator} (previously healed to '{new_locator}' but that also failed)"
+        new_locator_2, confidence_2 = heal_locator(page, hint, action, value or "")
+        print(f"🩹 AI 2nd suggestion: '{new_locator_2}' (confidence {confidence_2:.2f})")
 
-    save_cached(locator, page.url, new_locator_2, confidence_2)
-    log_heal(action, locator, new_locator_2, page.url, "ai-retry", confidence_2)
+        save_cached(locator, page.url, new_locator_2, confidence_2)
+        log_heal(action, locator, new_locator_2, page.url, "ai-retry", confidence_2)
 
-    # 7. Final retry
-    result = _perform(page, new_locator_2, action, value)
-    print(f"✅ Healed (2nd try): {action}('{new_locator_2}') succeeded")
-    return result if result is not None else new_locator_2
+        result = _perform(page, new_locator_2, action, value)
+        print(f"✅ Healed (2nd try): {action}('{new_locator_2}') succeeded")
+        return result if result is not None else new_locator_2
+    except Exception as e:
+        print(f"🚨 Second-chance heal also failed: {e}")
+        raise TimeoutError(
+            f"All healing attempts failed for '{locator}'. Last error: {e}"
+        )
